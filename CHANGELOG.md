@@ -2,7 +2,7 @@
 
 ## 0.3.0 — fleet mode, and the first release from its own repository
 
-acokit now lives at <https://github.com/paddock-os/acokit>. Earlier versions
+acokit now lives at <https://github.com/paddock-os/paddock-acokit>. Earlier versions
 were developed inside the league project it was extracted from.
 
 **Added**

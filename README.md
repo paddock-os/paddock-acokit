@@ -36,8 +36,8 @@ tools on top.
 
 ```bash
 # 1. Run the coordinator (serves overlays + ingests telemetry, port 3001)
-git clone https://github.com/paddock-os/acokit.git
-cd acokit
+git clone https://github.com/paddock-os/paddock-acokit.git
+cd paddock-acokit
 node server/coordinator.js
 
 # 2. Open an example overlay in a browser (or as an OBS Browser Source)
