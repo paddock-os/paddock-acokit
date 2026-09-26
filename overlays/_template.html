@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>acokit overlay template</title>
+<style>
+    /* Overlays are transparent (OBS composites them over the game capture).
+       Author at a fixed internal size and let --scale fit it to the source. */
+    :root { --scale: 1; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+                 font-family: system-ui, sans-serif; color: #fff; }
+    #root { transform: scale(var(--scale)); transform-origin: top left; }
+
+    /* ↓↓↓ your overlay markup/styles here ↓↓↓ */
+    #card { display: inline-block; padding: 16px 22px; border-radius: 8px;
+            background: rgba(20,20,28,.92); font-variant-numeric: tabular-nums; }
+    #speed { font-size: 64px; font-weight: 800; line-height: 1; }
+    #label { font-size: 14px; letter-spacing: 3px; color: #9aa; }
+</style>
+</head>
+<body>
+<div id="root">
+    <!-- ↓↓↓ your overlay markup here ↓↓↓ -->
+    <div id="card">
+        <div id="label">KM/H</div>
+        <div id="speed">0</div>
+    </div>
+</div>
+
+<!-- Paths are relative; copy the sdk/ folder next to your overlay or point here. -->
+<script src="../sdk/acokit.js"></script>
+<script src="../sdk/acokit-overlay.js"></script>
+<script>
+    // 1) Lifecycle: URL params, the OBS/shell scale handshake, visibility, and
+    //    render loops that pause when nobody can see them.
+    const root = document.getElementById('root');
+    const overlay = ACOverlay.init('my_overlay', {
+        applyScale: v => root.style.setProperty('--scale', v),
+    });
+
+    // 2) Connect. Auto-picks live SSE / orchestrator shell / ?demo=1.
+    const kit = new ACOKit();
+
+    // 3) React to data. See docs/SCHEMA.md for every field.
+    const speedEl = document.getElementById('speed');
+    kit.on('telemetry', (t) => {
+        speedEl.textContent = Math.round(t.speedKmh || 0);
+    });
+    kit.on('state', (s) => {
+        // s.spectatedDriver, s.currentTire, s.isInPit, s.sessionFlag, ...
+    });
+    kit.on('connection', (c) => {
+        document.title = c.connected ? 'connected' : 'offline';
+    });
+
+    // 4) Anything that animates goes in a lifecycle loop rather than a bare
+    //    requestAnimationFrame, so it stops while the shell has you hidden.
+    //    overlay.onShow(...) / overlay.onHide(...) run one-shot choreography —
+    //    put an intro THERE, not at load: inside a shell your iframe loads when
+    //    OBS starts, long before anyone sees it.
+    overlay.loop(() => {
+        // card.style.opacity = ...
+    }, { hz: 30 });
+</script>
+</body>
+</html>

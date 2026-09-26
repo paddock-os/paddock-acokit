@@ -1,0 +1,15 @@
+# Python bytecode from any local syntax-checking (AC uses its own embedded 3.3.5)
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Your league content (copy the .sample and fill it in)
+content/drivers.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/

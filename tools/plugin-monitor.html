@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Plugin monitor — AC telemetry</title>
+    <!--
+      Live view of what the in-game AC plugin is actually sending, field by
+      field, straight off the coordinator's SSE stream.
+
+      The question this answers is the one an overlay cannot: "is this field
+      real?" AC does not expose everything in every mode — DRS reads 0 in
+      replay, LastLap/BestLap/LapCount are 0 for a spectated car, and some
+      builds lack acsys members entirely. So each field records whether it has
+      EVER changed and the range it moved through. Drive a lap, then read the
+      table: anything still grey never moved and is not usable in this mode.
+
+      Ships with the kit because it is engine-generic: its only dependency is
+      sdk/acokit.js, and every project built on acokit wants it the first time
+      it wires up the plugin.
+
+      Usage:  run any acokit coordinator, serve this folder, and open
+              .../acokit/tools/plugin-monitor.html
+              ?api=host:port points it at a coordinator elsewhere.
+    -->
+    <script src="../sdk/acokit.js"></script>
+    <style>
+        :root { color-scheme: dark; }
+        body {
+            margin: 0; padding: 18px 22px; background: #0e0f12; color: #e6e7ea;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+        h1 { font-size: 17px; margin: 0 0 2px; }
+        .sub { color: #8a8f9c; font-size: 13px; margin: 0 0 16px; }
+
+        .bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+        .stat {
+            background: #181a20; border: 1px solid #2a2e38; border-radius: 8px;
+            padding: 8px 14px; min-width: 118px;
+        }
+        .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: #8a8f9c; }
+        .stat .v { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stat.good .v { color: #00d900; }
+        .stat.warn .v { color: #f0a020; }
+        .stat.bad .v { color: #ff5555; }
+
+        table { border-collapse: collapse; width: 100%; font-size: 13px; }
+        th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid #20232c; }
+        th { color: #8a8f9c; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+        td.name { font-family: Consolas, monospace; }
+        td.val { font-family: Consolas, monospace; font-variant-numeric: tabular-nums; color: #fff; }
+        td.range, td.type { color: #8a8f9c; font-family: Consolas, monospace; }
+        tr.dead td { color: #565b68; }
+        tr.dead td.val { color: #6b7180; }
+        .tag {
+            display: inline-block; padding: 1px 7px; border-radius: 999px;
+            font-size: 10px; font-weight: 700; letter-spacing: .4px;
+        }
+        .tag.live { background: rgba(0,217,0,.15); color: #00d900; }
+        .tag.dead { background: rgba(255,255,255,.06); color: #8a8f9c; }
+        h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #8a8f9c; margin: 22px 0 6px; }
+        .hint { color: #8a8f9c; font-size: 12px; margin-top: 14px; line-height: 1.5; }
+        code { background: #181a20; padding: 1px 5px; border-radius: 4px; }
+        button {
+            background: #1f222a; color: #e6e7ea; border: 1px solid #2a2e38;
+            border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer;
+        }
+        button:hover { background: #2a2e38; }
+    </style>
+</head>
+
+<body>
+    <h1>Plugin monitor</h1>
+    <p class="sub">What the AC plugin is really sending. <span id="src"></span></p>
+
+    <div class="bar">
+        <div class="stat" id="s-conn"><div class="k">Connection</div><div class="v">—</div></div>
+        <div class="stat" id="s-hz"><div class="k">Telemetry</div><div class="v">0 Hz</div></div>
+        <div class="stat" id="s-state"><div class="k">State</div><div class="v">0 Hz</div></div>
+        <div class="stat" id="s-age"><div class="k">Last packet</div><div class="v">—</div></div>
+        <div class="stat" id="s-driver"><div class="k">Focused driver</div><div class="v">—</div></div>
+        <div class="stat" id="s-laps"><div class="k">Laps seen</div><div class="v">0</div></div>
+    </div>
+
+    <button id="reset">Reset ranges</button>
+
+    <h2>TELEMETRY · ~30 Hz</h2>
+    <table>
+        <thead>
+            <tr><th style="width:22%">field</th><th style="width:8%">type</th><th style="width:20%">value</th>
+                <th style="width:30%">observed range</th><th style="width:20%">does it move?</th></tr>
+        </thead>
+        <tbody id="tel"></tbody>
+    </table>
+
+    <h2>PLUGIN_STATE · ~1 Hz</h2>
+    <table>
+        <thead>
+            <tr><th style="width:22%">field</th><th style="width:8%">type</th><th style="width:20%">value</th>
+                <th style="width:30%">observed range</th><th style="width:20%">does it move?</th></tr>
+        </thead>
+        <tbody id="st"></tbody>
+    </table>
+
+    <p class="hint">
+        A grey row means that field has <strong>never changed</strong> since you opened
+        this page. That is information, not a fault: AC does not expose the same things in every mode.
+        <code>drs</code> reads 0 in replay; <code>lastLapMs</code>, <code>bestLapMs</code> and
+        <code>lapCount</code> are 0 for a spectated car — which is why <code>completedLapMs</code>
+        exists, reconstructed frame by frame by the plugin.
+        Drive a full lap and check that <code>lapEvent</code> goes up exactly once.
+    </p>
+
+    <script>
+        const params = ACOKit.params();
+        document.getElementById('src').textContent = 'Coordinator: ' + ACOKit.apiBase();
+
+        const kit = new ACOKit();
+        const fields = { telemetry: {}, state: {} };   // name -> {min,max,changed,first,type}
+        let telCount = 0, stCount = 0;
+        let telWindow = [], stWindow = [];
+        let lastTelAt = 0, lastLapEvent = null, lapsSeen = 0;
+
+        function note(bag, key, value) {
+            const f = bag[key] || (bag[key] = { first: value, changed: false, min: null, max: null, type: typeof value });
+            if (JSON.stringify(value) !== JSON.stringify(f.first)) f.changed = true;
+            if (typeof value === 'number' && isFinite(value)) {
+                f.min = (f.min === null) ? value : Math.min(f.min, value);
+                f.max = (f.max === null) ? value : Math.max(f.max, value);
+            }
+            f.value = value;
+            f.type = Array.isArray(value) ? 'array' : typeof value;
+        }
+
+        function ingest(bag, payload) {
+            if (!payload || typeof payload !== 'object') return;
+            for (const [k, v] of Object.entries(payload)) note(bag, k, v);
+        }
+
+        const fmt = (v) => {
+            if (v === null || v === undefined) return '—';
+            if (Array.isArray(v)) return '[' + v.map(x => typeof x === 'number' ? x.toFixed(1) : x).join(', ') + ']';
+            if (typeof v === 'number') return Number.isInteger(v) ? String(v) : v.toFixed(3);
+            return String(v);
+        };
+
+        function render(tbodyId, bag) {
+            const rows = Object.keys(bag).sort().map(k => {
+                const f = bag[k];
+                const range = (f.min !== null && f.max !== null)
+                    ? `${fmt(f.min)} … ${fmt(f.max)}`
+                    : (f.changed ? 'varies' : '—');
+                // Keys and values come off the wire: escape them before they
+                // reach innerHTML.
+                const esc = ACOKit.escapeHtml;
+                return `<tr class="${f.changed ? '' : 'dead'}">
+                    <td class="name">${esc(k)}</td>
+                    <td class="type">${esc(f.type)}</td>
+                    <td class="val">${esc(fmt(f.value))}</td>
+                    <td class="range">${esc(range)}</td>
+                    <td><span class="tag ${f.changed ? 'live' : 'dead'}">${f.changed ? 'moves' : 'constant'}</span></td>
+                </tr>`;
+            });
+            document.getElementById(tbodyId).innerHTML = rows.join('') ||
+                '<tr><td colspan="5" style="color:#8a8f9c">Waiting for packets…</td></tr>';
+        }
+
+        function setStat(id, value, cls) {
+            const el = document.getElementById(id);
+            el.querySelector('.v').textContent = value;
+            el.className = 'stat' + (cls ? ' ' + cls : '');
+        }
+
+        kit.on('connection', (c) => setStat('s-conn', c.connected ? 'connected' : 'disconnected', c.connected ? 'good' : 'bad'));
+
+        kit.on('telemetry', (t) => {
+            telCount++; telWindow.push(Date.now()); lastTelAt = Date.now();
+            ingest(fields.telemetry, t);
+            // The lap reconstruction is the plugin's headline feature — count
+            // the completions so a full lap in AC is verifiable at a glance.
+            if (typeof t.lapEvent === 'number') {
+                if (lastLapEvent !== null && t.lapEvent !== lastLapEvent) lapsSeen++;
+                lastLapEvent = t.lapEvent;
+            }
+        });
+
+        kit.on('state', (s) => {
+            stCount++; stWindow.push(Date.now());
+            ingest(fields.state, s);
+            if (s && s.spectatedDriver) setStat('s-driver', s.spectatedDriver);
+        });
+
+        document.getElementById('reset').onclick = () => {
+            fields.telemetry = {}; fields.state = {}; lapsSeen = 0; lastLapEvent = null;
+        };
+
+        setInterval(() => {
+            const now = Date.now();
+            telWindow = telWindow.filter(t => now - t < 1000);
+            stWindow = stWindow.filter(t => now - t < 5000);
+            const hz = telWindow.length;
+            setStat('s-hz', hz + ' Hz', hz >= 20 ? 'good' : hz > 0 ? 'warn' : 'bad');
+            setStat('s-state', (stWindow.length / 5).toFixed(1) + ' Hz', stWindow.length ? 'good' : 'bad');
+            const age = lastTelAt ? now - lastTelAt : null;
+            setStat('s-age', age === null ? 'never' : age < 2000 ? age + ' ms' : (age / 1000).toFixed(1) + ' s',
+                age === null ? 'bad' : age < 2000 ? 'good' : 'warn');
+            setStat('s-laps', String(lapsSeen), lapsSeen > 0 ? 'good' : '');
+            render('tel', fields.telemetry);
+            render('st', fields.state);
+        }, 250);
+    </script>
+</body>
+
+</html>

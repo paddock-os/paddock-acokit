@@ -1,0 +1,57 @@
+{
+  "name": "acokit",
+  "version": "0.3.0",
+  "description": "AC Overlay Kit — a tiny, dependency-free engine for building Assetto Corsa broadcast overlays (in-game telemetry plugin + SSE coordinator + browser SDK).",
+  "keywords": [
+    "assetto-corsa",
+    "overlay",
+    "telemetry",
+    "obs",
+    "broadcast",
+    "sim-racing"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/paddock-os/acokit#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/paddock-os/acokit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/paddock-os/acokit/issues"
+  },
+  "scripts": {
+    "start": "node server/coordinator.js",
+    "dev": "node server/coordinator.js",
+    "test": "node test/run.js && node test/run-plugin.js",
+    "test:js": "node test/run.js",
+    "test:plugin": "node test/run-plugin.js"
+  },
+  "main": "sdk/acokit.js",
+  "files": [
+    "sdk",
+    "server",
+    "plugin",
+    "overlays",
+    "content",
+    "tools",
+    "docs",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "peerDependencies": {
+    "ws": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "ws": "^8.19.0"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}

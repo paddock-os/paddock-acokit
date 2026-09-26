@@ -1,0 +1,7 @@
+{
+  "_readme": "Sample league roster. Copy to content/drivers.json and fill with your grid. Strict: overlays should skip names not listed here.",
+  "drivers": {
+    "Demo Driver": { "team": "Demo Team", "number": "1", "color": "#16c64a", "logo": "" },
+    "Kai Morgan": { "team": "Apex Racing", "number": "7", "color": "#e10600", "logo": "" }
+  }
+}

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>acokit orchestrator template</title>
+<style>
+    /* An orchestrator shell holds the SINGLE coordinator connection and fans
+       every event out to embedded overlay <iframe>s via postMessage. Each child
+       uses `new ACOKit()` + `ACOverlay.init()` and auto-detects it is in a
+       shell — no changes needed. This is how you run a full broadcast on one
+       connection instead of one per widget.
+
+       Add/remove widgets in the WIDGETS array in the script below.            */
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    iframe.widget {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        border: 0; background: transparent; pointer-events: none;
+        opacity: 0; transition: opacity .35s ease;
+    }
+    iframe.widget.visible { opacity: 1; }
+</style>
+</head>
+<body>
+<script src="../sdk/acokit.js"></script>
+<script>
+    // ── Configure your widgets here ─────────────────────────────────────────
+    // `id` is what you show/hide by, and what a child passes to
+    // ACOverlay.init(id, …) so it can tell its own messages from its
+    // neighbours'. `visible` is the state it starts in.
+    const WIDGETS = [
+        { id: 'speedo',     file: 'example-speedo.html',     scale: 1.0, visible: true },
+        { id: 'laptracker', file: 'example-laptracker.html', scale: 1.0, visible: false },
+    ];
+    // Params forwarded from THIS page's URL to every child:
+    const FORWARD = ['s1', 's2', 's3', 'tyre', 'api', 'demo', 'theme'];
+
+    // ── Build child iframes ─────────────────────────────────────────────────
+    const here = new URLSearchParams(location.search);
+    const frames = {};                 // id -> iframe
+    const visible = {};                // id -> bool
+    const scales = {};                 // id -> number (pushed on SCALE_CAPABLE)
+    for (const w of WIDGETS) {
+        const q = new URLSearchParams();
+        for (const k of FORWARD) if (here.has(k)) q.set(k, here.get(k));
+        const f = document.createElement('iframe');
+        f.className = 'widget';
+        f.dataset.id = w.id;
+        f.src = w.file + (q.toString() ? '?' + q.toString() : '');
+        document.body.appendChild(f);
+        frames[w.id] = f;
+        // null, not false: "not told yet". The first setVisible() must always
+        // send a message, even when the widget starts hidden — otherwise a
+        // widget that begins its life off screen is never told so, and its
+        // render loops run behind an invisible iframe for the whole broadcast.
+        visible[w.id] = null;
+        scales[w.id] = w.scale != null ? w.scale : 1;
+    }
+
+    function post(id, msg) {
+        const f = frames[id];
+        if (!f || !f.contentWindow) return;
+        try { f.contentWindow.postMessage(msg, '*'); } catch (_) {}
+    }
+    function forward(msg) { for (const id in frames) post(id, msg); }
+
+    // ── Visibility ──────────────────────────────────────────────────────────
+    // The shell decides WHEN a widget is on screen; the child decides what to
+    // do about it (ACOverlay's onShow/onHide, and its render loops, which stop
+    // while hidden). Fading the iframe is not enough on its own: a hidden
+    // iframe still runs, so the message is what actually saves the CPU — and
+    // it is the only correct cue for a one-shot intro, since every iframe
+    // loads when OBS starts, long before anyone sees it.
+    function setVisible(id, on) {
+        if (!frames[id] || visible[id] === !!on) return;
+        visible[id] = !!on;
+        frames[id].classList.toggle('visible', visible[id]);
+        post(id, { type: visible[id] ? 'OVERLAY_SHOW' : 'OVERLAY_HIDE', overlay: id });
+    }
+    window.show = (id) => setVisible(id, true);
+    window.hide = (id) => setVisible(id, false);
+    /** Show a widget for a while — the shape most broadcast graphics want. */
+    window.flash = (id, ms) => { setVisible(id, true); setTimeout(() => setVisible(id, false), ms || 8000); };
+
+    // ── Theme ───────────────────────────────────────────────────────────────
+    // Children inherit ?theme= from this page's URL by themselves (see
+    // sdk/acokit-theme.js). This is only for switching live, without a reload.
+    window.setTheme = (name) => {
+        if (window.ACOTheme && !window.ACOTheme.set(name)) return false;
+        forward({ type: 'THEME_SET', theme: name });
+        return true;
+    };
+
+    // ── Child → shell messages ──────────────────────────────────────────────
+    window.addEventListener('message', (ev) => {
+        const d = ev.data;
+        if (!d || typeof d !== 'object') return;
+
+        // A child that finished loading may have missed everything sent so
+        // far. Replay it: the cached SYNC so it has data, and its CURRENT
+        // visibility — both directions matter. A missed HIDE leaves its render
+        // loop burning CPU behind a faded-out iframe; a missed SHOW means a
+        // one-shot widget never performs at all.
+        if (d.type === 'SHELL_OVERLAY_READY' && ev.source) {
+            if (cachedSync) { try { ev.source.postMessage(cachedSync, '*'); } catch (_) {} }
+            for (const id in frames) {
+                if (frames[id].contentWindow === ev.source) {
+                    post(id, { type: visible[id] ? 'OVERLAY_SHOW' : 'OVERLAY_HIDE', overlay: id });
+                    break;
+                }
+            }
+            return;
+        }
+
+        // A child that scales itself internally (ACOverlay's `scaleVar`) tells
+        // us so; we push it a number instead of transform-scaling its iframe,
+        // which keeps its type hinted and its borders 1px crisp.
+        if (d.type === 'SCALE_CAPABLE' && typeof d.overlay === 'string') {
+            post(d.overlay, { type: 'SET_SCALE', value: scales[d.overlay] != null ? scales[d.overlay] : 1 });
+        }
+    });
+
+    // ── Single connection → fan out to all children ─────────────────────────
+    let cachedSync = null;
+
+    // Coordinator host: the same rule every widget uses (ACOKit.apiBase) —
+    // the page's origin, :3001 from the dev static server, or ?api=host:port.
+    const API = ACOKit.apiBase();
+    // In ?demo=1 the children simulate their own data — no shell connection needed.
+    if (here.get('demo') !== '1') {
+        const es = new EventSource(API + '/api/events');
+        es.onmessage = (e) => {
+            let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+            if (m && m.EventType === 'SYNC') cachedSync = m;
+            forward(m);
+        };
+    }
+
+    // Apply the starting visibility once the frames exist. Children that are
+    // not ready yet will get theirs from the SHELL_OVERLAY_READY replay above.
+    for (const w of WIDGETS) setVisible(w.id, w.visible !== false);
+
+    // Try it from the console:  show('laptracker')  ·  flash('speedo', 3000)
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>acokit example — speedo</title>
+<style>
+    :root { --scale: 1; --accent: #16c64a; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+                 font-family: system-ui, sans-serif; color: #fff; }
+    #root { transform: scale(var(--scale)); transform-origin: top left; }
+    #hud { display: flex; align-items: stretch; gap: 2px; background: rgba(16,16,22,.92);
+           border-radius: 10px; overflow: hidden; width: 420px; }
+    .cell { padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; }
+    .cell .v { font-size: 40px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+    .cell .k { font-size: 11px; letter-spacing: 2px; color: #8a93a6; margin-top: 4px; }
+    #gear { width: 86px; align-items: center; background: rgba(255,255,255,.05); }
+    #gear .v { font-size: 56px; color: var(--accent); }
+    #speed { flex: 1; }
+    #bars { width: 120px; gap: 6px; }
+    .bar { height: 12px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+    .bar > i { display: block; height: 100%; width: 0%; transition: width .08s linear; }
+    #thr > i { background: var(--accent); }
+    #brk > i { background: #f8143c; }
+    #drs { font-size: 12px; font-weight: 800; letter-spacing: 2px; color: #2a2f3a; transition: color .2s; }
+    #drs.on { color: var(--accent); }
+</style>
+</head>
+<body>
+<div id="root">
+    <div id="hud">
+        <div class="cell" id="gear"><div class="v" id="gearV">N</div><div class="k">GEAR</div></div>
+        <div class="cell" id="speed"><div class="v"><span id="speedV">0</span></div><div class="k">KM/H · <span id="rpmV">0</span> RPM</div></div>
+        <div class="cell" id="bars">
+            <div class="k">THR / BRK</div>
+            <div class="bar" id="thr"><i></i></div>
+            <div class="bar" id="brk"><i></i></div>
+            <div id="drs">DRS</div>
+        </div>
+    </div>
+</div>
+
+<script src="../sdk/acokit.js"></script>
+<script src="../sdk/acokit-overlay.js"></script>
+<script>
+    const root = document.getElementById('root');
+    // The lifecycle owns the OBS/shell scale handshake, visibility and any
+    // render loops. See docs/BUILDING-OVERLAYS.md.
+    const overlay = ACOverlay.init('speedo', {
+        applyScale: v => root.style.setProperty('--scale', v),
+    });
+    const kit = new ACOKit();
+
+    const el = {
+        speed: document.getElementById('speedV'), rpm: document.getElementById('rpmV'),
+        gear: document.getElementById('gearV'),
+        thr: document.querySelector('#thr > i'), brk: document.querySelector('#brk > i'),
+        drs: document.getElementById('drs'),
+    };
+    // plugin gear encoding: 0=R, 1=N, 2=1st gear...
+    const gearLabel = g => g === 0 ? 'R' : g === 1 ? 'N' : String(g - 1);
+
+    kit.on('telemetry', (t) => {
+        el.speed.textContent = Math.round(t.speedKmh || 0);
+        el.rpm.textContent = Math.round(t.rpm || 0);
+        el.gear.textContent = (typeof t.gear === 'number') ? gearLabel(t.gear) : 'N';
+        el.thr.style.width = Math.round((t.throttle || 0) * 100) + '%';
+        el.brk.style.width = Math.round((t.brake || 0) * 100) + '%';
+        el.drs.classList.toggle('on', (t.drs || 0) > 0.5);
+    });
+</script>
+</body>
+</html>

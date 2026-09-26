@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>acokit example — lap tracker</title>
+<style>
+    /* A generic timing tower built on acokit + acokit-racing. Demonstrates:
+       arming (hidden until the S/F line), a smooth interpolated clock, and
+       hardcoded sectors firing off the live lap clock (for replay clips).
+       Configure per recording:  ?s1=23.643&s2=37.435&s3=24.475&tyre=M       */
+    :root { --scale: 1; --purple: #a020f0; --green: #00d900; --yellow: #ffb800; }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+                 font-family: system-ui, sans-serif; color: #fff; }
+    #root { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%) scale(var(--scale)); transform-origin: bottom center; }
+    #panel { width: 320px; background: rgba(18,18,26,.95); border-radius: 6px; overflow: hidden;
+             opacity: 0; transform: translateY(12px); transition: opacity .18s ease-out, transform .26s cubic-bezier(.22,1,.36,1); }
+    #panel.show { opacity: 1; transform: translateY(0); }
+    .head { display: flex; align-items: center; height: 38px; background: #111118; }
+    .num { width: 40px; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 900; background: #e10600; }
+    .name { flex: 1; padding-left: 8px; font-weight: 700; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tyre { width: 34px; display: flex; align-items: center; justify-content: center; }
+    .tyre span { width: 22px; height: 22px; border-radius: 50%; border: 2px solid currentColor; font-size: 13px; font-weight: 900; font-style: italic; display: flex; align-items: center; justify-content: center; }
+    .tyre .H { color: #fff; } .tyre .M { color: var(--yellow); } .tyre .S { color: #e10600; }
+    .tyre .SS { color: #ff2222; } .tyre .I { color: var(--green); } .tyre .W { color: #48f; }
+    .time { text-align: center; font-size: 46px; font-weight: 900; padding: 8px 0 4px; font-variant-numeric: tabular-nums; }
+    .time.purple { color: var(--purple); } .time.white { color: #fff; }
+    .foot { display: flex; gap: 4px; padding: 0 10px 8px; }
+    .sec { flex: 1; text-align: center; }
+    .sec .bar { height: 5px; background: rgba(255,255,255,.12); border-radius: 1px; overflow: hidden; }
+    .sec .bar > i { display: block; height: 100%; width: 0%; background: #fff; transition: width .1s linear; }
+    .sec .t { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; min-height: 15px; color: #8a93a6; }
+    .sec.purple .bar > i { background: var(--purple); width: 100%; } .sec.purple .t { color: var(--purple); }
+</style>
+</head>
+<body>
+<div id="root">
+    <div id="panel">
+        <div class="head">
+            <div class="num" id="num">--</div>
+            <div class="name" id="name">—</div>
+            <div class="tyre"><span id="tyre"></span></div>
+        </div>
+        <div class="time white" id="time">--:--.---</div>
+        <div class="foot">
+            <div class="sec" id="s0"><div class="bar"><i></i></div><div class="t" id="t0"></div></div>
+            <div class="sec" id="s1"><div class="bar"><i></i></div><div class="t" id="t1"></div></div>
+            <div class="sec" id="s2"><div class="bar"><i></i></div><div class="t" id="t2"></div></div>
+        </div>
+    </div>
+</div>
+
+<script src="../sdk/acokit.js"></script>
+<script src="../sdk/acokit-overlay.js"></script>
+<script src="../sdk/acokit-racing.js"></script>
+<script>
+    const P = ACOKit.params();
+    const root = document.getElementById('root');
+    const overlay = ACOverlay.init('laptracker', {
+        applyScale: v => root.style.setProperty('--scale', v),
+    });
+
+    // ── Hardcoded config (for a known replay lap) ───────────────────────────
+    const secMs = (k, d) => { const v = parseFloat(P[k]); return v > 0 ? Math.round(v * 1000) : d; };
+    const TYRE = (P.tyre || 'M').toUpperCase();
+    const st = new ACOKitRacing.SectorTimer([secMs('s1', 23643), secMs('s2', 37435), secMs('s3', 24475)]);
+    const clock = new ACOKitRacing.LapClock();
+
+    const el = id => document.getElementById(id);
+    el('tyre').textContent = TYRE; el('tyre').className = TYRE;
+
+    function lightSector(i) {
+        el('s' + i).classList.add('purple');
+        el('t' + i).textContent = ACOKitRacing.fmtSector(st.sectors[i]);
+    }
+    function resetSectors() {
+        st.reset();
+        for (let i = 0; i < 3; i++) { el('s' + i).classList.remove('purple'); el('s' + i).querySelector('i').style.width = '0%'; el('t' + i).textContent = ''; }
+    }
+
+    let hold = 0;
+    const watcher = new ACOKitRacing.LapWatcher({
+        onStart() { el('panel').classList.add('show'); resetSectors(); hold = 0; },     // arm → appear + count from 0
+        onComplete() {                                                                  // reveal hardcoded total
+            for (let i = 0; i < 3; i++) lightSector(i);
+            el('time').textContent = ACOKitRacing.fmtLap(st.total);
+            el('time').className = 'time purple';
+            hold = Date.now() + 6000;
+            setTimeout(() => { hold = 0; resetSectors(); }, 6060);
+        },
+    });
+
+    const kit = new ACOKit();
+    kit.on('state', s => {
+        if (s.spectatedDriver) el('name').textContent = s.spectatedDriver;
+    });
+    kit.on('telemetry', t => {
+        const shown = watcher.feed(t);
+        if (!shown) return;
+        clock.update(t.lapTimeMs || 0);
+        st.update(clock.ms()).forEach(lightSector);          // fire sectors on the live clock
+    });
+
+    // Smooth 60fps clock + live sector fills. overlay.loop() instead of a
+    // bare requestAnimationFrame: inside a shell this pauses while the
+    // widget is hidden, so it costs nothing when nobody is looking.
+    overlay.loop(() => {
+        if (!el('panel').classList.contains('show') || hold) return;
+        const ms = clock.ms();
+        el('time').textContent = ACOKitRacing.fmtLap(ms);
+        el('time').className = 'time white';
+        for (let i = 0; i < 3; i++) if (!st.done[i]) el('s' + i).querySelector('i').style.width = (st.fill(i, ms) * 100) + '%';
+    });
+</script>
+</body>
+</html>
