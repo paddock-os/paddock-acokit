@@ -48,6 +48,9 @@
     function Router() {
         var handlers = {};
         global.addEventListener('message', function (ev) {
+            // Only the shell that frames us: any other window holding a
+            // handle on this document must not show, hide or rescale it.
+            if (ev.source !== global.parent || global.parent === global) return;
             var m = ev.data;
             if (!m || typeof m !== 'object' || typeof m.type !== 'string') return;
             var list = handlers[m.type];
@@ -215,7 +218,7 @@
     var ACOverlay = {
         /** Create the lifecycle for this overlay. Call once, at script time. */
         init: function (name, opts) { return new Overlay(name, opts); },
-        version: '0.3.0',
+        version: '0.3.1',
     };
 
     global.ACOverlay = ACOverlay;

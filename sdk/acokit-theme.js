@@ -102,6 +102,9 @@
     global.document.documentElement.setAttribute('data-theme', current);
 
     global.addEventListener('message', function (ev) {
+        // Only the shell that frames us: any other window holding a handle on
+        // this document (one that opened it, say) must not restyle it.
+        if (ev.source !== global.parent || global.parent === global) return;
         var m = ev.data;
         if (m && typeof m === 'object' && m.type === 'THEME_SET') set(m.theme);
     });

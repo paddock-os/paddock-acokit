@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.1 — overlays listen only to the shell that frames them
+
+**Security**
+- Every `message` listener in the browser SDK now checks who sent the message.
+  Before, any window holding a handle on an overlay -- one that opened it with
+  `window.open`, for instance -- could switch its theme (`THEME_SET`), show,
+  hide or rescale it (`OVERLAY_SHOW`, `OVERLAY_HIDE`, `SET_SCALE`), or, in
+  shell mode, feed it race data as if it were the orchestrator's relay.
+  - `acokit-theme.js`, `acokit-overlay.js` (the shared router, and so every
+    handler registered with `ACOverlay.on()`) and `ACOKit`'s `SET_SCALE`
+    listener accept a message only from `window.parent`, and only when the page
+    is actually framed.
+  - `ACOKit`'s shell relay accepts envelopes only from `window.parent`.
+
+**Changed**
+- A page nobody frames no longer reacts to `THEME_SET`. Nothing in acokit sent
+  it one: the orchestrator posts to its own `<iframe>`s. Use `?theme=` or
+  `ACOTheme.set()` on a standalone page.
+- The test harness's `dispatch()` sends a `message` from the page's parent, as
+  a real shell does, and takes a third argument to play another window.
+
+The AC plugin is unchanged and still reports `0.3.0`.
+
 ## 0.3.0 — fleet mode, and the first release from its own repository
 
 acokit now lives at <https://github.com/paddock-os/paddock-acokit>. Earlier versions

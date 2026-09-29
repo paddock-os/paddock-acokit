@@ -126,6 +126,8 @@
         announce();
         global.addEventListener('load', announce);
         global.addEventListener('message', (ev) => {
+            // Only the shell that frames us.
+            if (ev.source !== global.parent || global.parent === global) return;
             const d = ev.data;
             if (d && d.type === 'SET_SCALE' && typeof d.value === 'number' && d.value > 0) apply(d.value);
         });
@@ -216,6 +218,9 @@
             }
             if (this.isInShell) {
                 global.addEventListener('message', (ev) => {
+                    // The shell's relay is the live feed: only the frame's
+                    // own parent may speak for it.
+                    if (ev.source !== global.parent) return;
                     const d = ev.data;
                     if (!d || typeof d !== 'object' || !('EventType' in d)) return;
                     this._handle(d);
@@ -286,7 +291,7 @@
     ACOKit.formatGap = formatGap;
     ACOKit.escapeHtml = escapeHtml;
     ACOKit.setupScale = setupScale;
-    ACOKit.version = '0.3.0';
+    ACOKit.version = '0.3.1';
 
     global.ACOKit = ACOKit;
 })(typeof window !== 'undefined' ? window : this);

@@ -120,8 +120,11 @@ function browserEnv(opts) {
             const i = l.indexOf(fn);
             if (i >= 0) l.splice(i, 1);
         },
-        dispatch(type, data) {
-            for (const fn of (listeners[type] || []).slice()) fn({ data, type });
+        // A `message` comes from the page's parent unless a test says whose
+        // window sent it -- which is what the SDK checks before it listens.
+        dispatch(type, data, source) {
+            const from = arguments.length >= 3 ? source : win.parent;
+            for (const fn of (listeners[type] || []).slice()) fn({ data, type, source: from });
         },
         requestAnimationFrame(fn) { rafQueue.push({ id: ++rafSeq, fn }); return rafSeq; },
         cancelAnimationFrame(id) { rafQueue = rafQueue.filter(f => f.id !== id); },
@@ -186,7 +189,10 @@ function browserEnv(opts) {
         intervalCount() { return intervals.length; },
         install() { global.Date.now = () => now; },
         restore() { global.Date.now = realNow; },
-        dispatch(type, data) { win.dispatch(type, data); },
+        dispatch(type, data, source) {
+            if (arguments.length >= 3) win.dispatch(type, data, source);
+            else win.dispatch(type, data);
+        },
     };
 }
 

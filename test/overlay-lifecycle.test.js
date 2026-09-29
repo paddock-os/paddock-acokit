@@ -47,6 +47,14 @@ suite('lifecycle · visibility', () => {
         env.restore();
     });
 
+    test('a hide from a window that is not the shell is ignored', () => {
+        const env = mount({ parentSearch: '' });
+        const o = env.window.ACOverlay.init('x');
+        env.dispatch('message', { type: 'OVERLAY_HIDE', overlay: 'x' }, {});
+        eq(o.visible, true, 'only the parent of the frame may gate it');
+        env.restore();
+    });
+
     test('messages addressed to another overlay are ignored', () => {
         const env = mount({ parentSearch: '' });
         const o = env.window.ACOverlay.init('x');
@@ -243,6 +251,14 @@ suite('lifecycle · scale handshake', () => {
         env.window.ACOverlay.init('x', { scaleVar: '--s' });
         env.dispatch('message', { type: 'SET_SCALE', value: 2.5 });
         eq(env.style.getPropertyValue('--s'), '2.5');
+        env.restore();
+    });
+
+    test('SET_SCALE from a window that is not the shell is ignored', () => {
+        const env = mount({ search: '?scale=1.2', parentSearch: '' });
+        env.window.ACOverlay.init('x', { scaleVar: '--s' });
+        env.dispatch('message', { type: 'SET_SCALE', value: 2.5 }, {});
+        eq(env.style.getPropertyValue('--s'), '1.2');
         env.restore();
     });
 

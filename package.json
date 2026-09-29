@@ -1,6 +1,6 @@
 {
   "name": "paddock-acokit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AC Overlay Kit — a tiny, dependency-free engine for building Assetto Corsa broadcast overlays (in-game telemetry plugin + SSE coordinator + browser SDK).",
   "keywords": [
     "assetto-corsa",

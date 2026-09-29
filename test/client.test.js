@@ -207,6 +207,17 @@ suite('client · envelope routing', () => {
         env.restore();
     });
 
+    test('shell mode takes envelopes only from the shell itself', () => {
+        // The relay is the live feed: another window must not be able to
+        // speak for the race.
+        const env = mount({ parentSearch: '' });
+        const kit = new env.window.ACOKit();
+        const seen = record(kit, ['telemetry']);
+        env.dispatch('message', { EventType: 'TELEMETRY', Message: { speedKmh: 999 } }, {});
+        eq(seen.telemetry.length, 0);
+        env.restore();
+    });
+
     test('shell mode ignores postMessages that are not envelopes', () => {
         // The same channel carries SET_SCALE, OVERLAY_SHOW, THEME_SET…
         const env = mount({ parentSearch: '' });

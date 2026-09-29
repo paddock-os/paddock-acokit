@@ -88,10 +88,26 @@ suite('theme · switching', () => {
         eq(env.document.documentElement.getAttribute('data-theme'), 'classic');
     });
 
-    test('a THEME_SET message switches it', () => {
-        const { theme, env } = mount();
+    test('a THEME_SET from the shell switches it', () => {
+        const { theme, env } = mount({ parentSearch: '' });
         env.dispatch('message', { type: 'THEME_SET', theme: 'classic' });
         eq(theme.current, 'classic');
+    });
+
+    test('a THEME_SET from any other window is ignored', () => {
+        // One that opened the overlay, say: it holds a handle on it, and a
+        // handle is all postMessage needs.
+        const { theme, env } = mount({ parentSearch: '' });
+        const before = theme.current;
+        env.dispatch('message', { type: 'THEME_SET', theme: 'classic' }, {});
+        eq(theme.current, before);
+    });
+
+    test('a page nobody frames takes no THEME_SET', () => {
+        const { theme, env } = mount();
+        const before = theme.current;
+        env.dispatch('message', { type: 'THEME_SET', theme: 'classic' });
+        eq(theme.current, before);
     });
 
     test('a missing stylesheet falls back to the default', () => {

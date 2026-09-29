@@ -121,6 +121,6 @@
         }
     };
 
-    R.version = '0.3.0';
+    R.version = '0.3.1';
     global.ACOKitRacing = R;
 })(typeof window !== 'undefined' ? window : this);

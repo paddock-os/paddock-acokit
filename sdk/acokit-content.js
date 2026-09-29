@@ -76,6 +76,6 @@
         },
     };
 
-    C.version = '0.3.0';
+    C.version = '0.3.1';
     global.ACOKitContent = C;
 })(typeof window !== 'undefined' ? window : this);
